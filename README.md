@@ -1,8 +1,8 @@
 # NavMeshAgent
 
 **Integrantes:**
-* Raúl Beltrán Gómez (C-312) (@rb58853)
-* Lidier Robaina Caraballo (C-312) (@lido98)
+* Raúl Beltrán Gómez (C-312) ([@rb58853](https://github.com/rb58853))
+* Lidier Robaina Caraballo (C-312) ([@lido98](https://github.com/lido98))
 
 **Objetivo:** Decidir y simular los movimientos óptimos de agentes de navegación que interactúan entre ellos donde influyen condiciones climatológicas, estacionales y del terreno.
 

@@ -114,5 +114,25 @@ namespace BaseNode
         {
             return "<" + x + "," + y + "," + z + ">";
         }
+
+        public static float Distance_from_point_to_line(Point p, Point l1, Point l2)  // l1 and l2 points on the line
+        {
+            float a, b, c;
+            if (l1.x == l2.x)
+            {
+                a = 1;
+                b = 0;
+            }
+            else
+            {
+                a = (l2.y - l1.y)/(l1.x - l2.x);
+                b = 1;
+            }   
+            c = - (a * l1.x + b * l1.y);
+
+            return Math.Abs(a * p.x + b * p.y + c) / Math.Sqrt(Math.Pow(a,2) + Math.Pow(b,2));
+        }
     }
 }
+
+

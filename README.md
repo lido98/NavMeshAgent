@@ -32,4 +32,4 @@ La toma de decisiones de los agentes se resuelve naturalmente mediante algoritmo
 * Búsqueda adversarial para obstruir el desplazamiento del enemigo
 * Uso de metaheurísticas para la optimización de los algoritmos anteriores
 
-https://github.com/lido98/NavMeshAgent
+https://github.com/rb58853/NavMeshAgent

@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using DijkstraSpace;
 using Point_Map;
-
+using UnityEngine;
 namespace BaseNode
 {
-    abstract class Node : IComparable<Node>
+    public abstract class Node : IComparable<Node>
     {
         public float value { get => Value(); }
         public bool visited { get; protected set; }
@@ -42,7 +42,7 @@ namespace BaseNode
             nodes.Add(node);
         }
     }
-    class Point
+    public class Point
     {
         public float x { get; private set; }
         public float y { get; private set; }
@@ -113,6 +113,10 @@ namespace BaseNode
         public override string ToString()
         {
             return "<" + x + "," + y + "," + z + ">";
+        }
+        public Vector3 ToVector3()
+        {
+            return new Vector3(x, y, z);
         }
     }
 }

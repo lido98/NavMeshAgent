@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Agent_Space
 {
-    class Agent
+    public class Agent
     {
         public MapNode currentNode { get; private set; }
         public Point position { get; private set; }
@@ -18,7 +18,7 @@ namespace Agent_Space
         private Stack<PointNode> pointPath;
 
         public Stack<Point> visualPath { get; private set; }
-        public bool inMove = false;
+        public bool inMove { get; private set; }
 
         /// <summary> Compatibility of this Agent whit a material.</summary>
         public Dictionary<Material, float> compatibility;
@@ -29,6 +29,7 @@ namespace Agent_Space
             trianglePath = new Queue<MapNode>();
             pointPath = new Stack<PointNode>();
             visualPath = new Stack<Point>();
+            inMove = false;
         }
         public void SetCompatibility(Material material, float value)
         {
@@ -56,7 +57,7 @@ namespace Agent_Space
         Tuple<MapNode[], MapNode, MapNode> BFS(Point endPoint)
         {
             bool endWasFound = false;
-            int countAfterFound = 10;
+            int countAfterFound = Environment.bfsArea;
 
             List<MapNode> localMap = new List<MapNode>();
 
@@ -67,18 +68,15 @@ namespace Agent_Space
 
             MapNode end = null;
 
-            r.Add(currentNode, new MapNode(currentNode, this));
+            r.Add(currentNode, new MapNode(currentNode, this, endPoint));
             visited.Add(currentNode);
 
             localMap.Add(r[currentNode]);
 
 
             if (currentNode.triangle.PointIn(endPoint))
-            {
                 ///If endPoint is in Current node, return only current node as path, init and endNode
-                r[currentNode].SetEndNode(r[currentNode]);
                 return new Tuple<MapNode[], MapNode, MapNode>(localMap.ToArray(), r[currentNode], r[currentNode]);
-            }
 
             q.Enqueue(currentNode);
 
@@ -96,7 +94,7 @@ namespace Agent_Space
                     if (!visited.Contains(adj))
                     {
                         visited.Add(adj);
-                        MapNode temp = new MapNode(adj, this);
+                        MapNode temp = new MapNode(adj, this, endPoint);
 
                         if (adj.triangle.PointIn(endPoint))
                         {
@@ -124,10 +122,7 @@ namespace Agent_Space
                 }
             }
 
-            if (end != null)
-                foreach (MapNode node in localMap)
-                    node.SetEndNode(end);
-            else
+            if (end == null)
                 localMap = new List<MapNode>();
 
             return new Tuple<MapNode[], MapNode, MapNode>(localMap.ToArray(), r[currentNode], end);
@@ -141,6 +136,9 @@ namespace Agent_Space
             Node[] nodes = localMap.Item1;
             Node init = localMap.Item2;
             Node end = localMap.Item3;
+
+            if (end == null)
+                return new MapNode[0];
 
             Dijkstra dijkstra = new Dijkstra(init, end, nodes);
 
@@ -158,7 +156,7 @@ namespace Agent_Space
             Dijkstra dijkstra = new Dijkstra(init, end, nodes);
 
             if (nodes.Length == 0)
-                throw new Exception("No existe camino");
+                return null;
 
             MapNode[] path = tools.ToArrayAsMapNode(dijkstra.GetPath());/// Si se puede, mejorar la eficiencia con lo default
 
@@ -167,10 +165,13 @@ namespace Agent_Space
         public PointNode[] GetPointPath(Point endPoint)
         {
             List<Arist> aritPath = GetAritsPath(endPoint);
-            List<PointNode> mapPoints = PointNode.Static.CreatePointMap(aritPath, position, endPoint, Environment.densityPath);
 
-            if (mapPoints.Count == 0)
+            if (aritPath == null)
                 return new PointNode[1] { new PointNode(position) };
+
+            float density = Environment.densityPath;
+            float mCost = currentNode.MaterialCost(this);
+            List<PointNode> mapPoints = PointNode.Static.CreatePointMap(aritPath, position, endPoint, density, mCost);
 
             ///MapPoints[0] = endNode
             ///MapPoints[1] = initNode
@@ -181,27 +182,29 @@ namespace Agent_Space
         }
         public void SetPointPath(Point point)
         {
+            pointPath.Clear();
             GetTrianglePath(point);
             PointNode[] path = GetPointPath(point);
             for (int i = path.Length - 1; i >= 0; i--)
                 pointPath.Push(path[i]);
 
             nextPosition = pointPath.Pop();
+            currentPosition = null;
             NextPoint();
         }
 
         public void NextMove(int n = 1)
         {
             for (int i = 0; i < n; i++)
-                //if (inMove)
-                    NextMoveBasic();
+                NextMoveBasic();
         }
         void NextMoveBasic()
         {
             if (inMove)
             {
-                position = visualPath.Pop();
                 if (visualPath.Count == 0) NextPoint();
+                try { position = visualPath.Pop(); }
+                catch { Debug.Log("Error: la pila tiene " + visualPath.Count + " elementos y esta intentando hacer Pop()."); }
             }
         }
         void NextPoint()
@@ -216,7 +219,10 @@ namespace Agent_Space
 
             visualPath.Clear();
 
-            currentNode = trianglePath.Dequeue();
+
+            try { currentNode = trianglePath.Dequeue().origin; }
+            catch { Debug.Log("La cola tiene " + trianglePath.Count + " elementos y esta intentando hacer Dequeue()"); }
+
             currentPosition = nextPosition;
             nextPosition = pointPath.Pop();
 
@@ -224,8 +230,13 @@ namespace Agent_Space
 
             List<Point> temp = new Arist(currentPosition.point, nextPosition.point).ToPoints(cost);
 
-            for (int i = temp.Count - 1; i >= 1; i--)
+            if (temp.Count <= 1)
+                Debug.Log(temp.Count);
+
+            for (int i = temp.Count - 1; i >= 0; i--)
                 visualPath.Push(temp[i]);
+
+            NextMoveBasic();
         }
         internal class tools
         {

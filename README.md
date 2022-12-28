@@ -4,11 +4,32 @@
 * Raúl Beltrán Gómez (C-312) ([@rb58853](https://github.com/rb58853))
 * Lidier Robaina Caraballo (C-312) ([@lido98](https://github.com/lido98))
 
-**Objetivo:** Decidir y simular los movimientos óptimos de agentes de navegación que interactúan entre ellos donde influyen condiciones climatológicas, estacionales y del terreno.
+**Objetivo:** Decidir y simular los movimientos óptimos de agentes de navegación que interactúan entre ellos y donde influyen condiciones climatológicas, estacionales y del terreno.
 
-## Descripción
-* **Terreno**: Se define como un grafo de aristas con costo donde los vértices son posiciones accesibles a las cuales se pueden mover los agentes (cada agente puede tener posiciones accesibles distintas a otros) y las aristas definen si se puede ir de un vértice a otro. Cada movimiento (arista) tiene un costo de tiempo en el cual la recorre, esto está dado por las condiciones del terreno como puede ser hierva alta, fango, agua y otros. Un terreno está definido en el espacio y no en el plano, ir de un vértice a otro puede ser más costoso por estar en subida en una elevación y viceversa al estar en bajada (o por la dirección del viento, y otros), por lo que el grafo de movimiento tiene valores para cada dirección de la arista (realmente es un grafo formado por arcos, donde dos arcos entre los mismos vértices pueden o no tener el mismo costo de recorrido).
-* **Estaciones:** Cada estación traerá consigo las condiciones climatológicas de la misma y los cambios en el terreno a los que esto conlleva. El otoño trae consigo vientos más fuertes y caída de las hojas que obstaculizan el terreno, el invierno convierte el agua en hielo (por ejemplo un río congelado pasa a ser transitable) y se produce acumulación de nieve, en primavera la hierba crece más y algunos recorridos serán más costosos, en verano la lluvia creará charcos, los pantanos serán más difíciles de transitar, entre otras condiciones que se pueden dar.
-* **Condiciones climatológicas:** Las condiciones del clima o eventos arbitrarios que pueden suceder en un escenario provocan cambios en las condiciones del terreno, por ejemplo, la caída de un árbol, las lluvias intensas, las tormentas de nieve, los vientos fuertes, el desborde de un río, entre otros.
-* **Agentes de navegación:** Los agentes son los encargados de interactuar con el medio y moverse de la forma "más inteligente" posible de una posición a otra, los agentes interactúan entre ellos y, dependendiendo de ciertas condiciones específicas de cada agente, hay lugares que pueden ser alcanzables por algunos agentes y otros no, por ejemplo: agentes con habilidad para volar podrán alcanzar algunas elevaciones que otros agentes no pueden, agentes más grandes pueden saltar obstáculos que otros no pueden, agentes más pesados son menos afectados por el viento que otros con menos peso. Un agente no puede ir a la posición de otro agente, es decir, dos agentes no pueden coincidir en el mismo vértice del grafo.
+## Malla de navegación (NavMesh)
+Estructura de datos abstracta utilizada en aplicaciones de inteligencia artificial para ayudar a los agentes a encontrar caminos a través de espacios complicados. Consiste en una colección de polígonos convexos bidimensionales que definen qué áreas de un entorno pueden atravesar los agentes.
+* Los polígonos adyacentes se conectan entre sí en un grafo.
+* Cada vértice de los polígonos posee un factor de elevación para la representación del terreno en tres dimensiones.
+* A los polígonos se le pueden asociar lagos, ríos, biomas como pantanos o selvas, y los elementos del terreno relacionados con estos como árboles o rocas.
+* La malla se mantiene estática durante la ejecución del programa aunque algunos elementos pueden ser modificados, por ejemplo un río puede congelarse y volverse transitable.
+* Nos apoyaremos en librerías ya implementadas en Unity para la generación del terreno con malla de navegación.
 
+## Simulación
+
+* **Agentes de navegación:** Simulación basada en agentes inteligentes que son capaces de realizar acciones autónomas flexibles:
+    * Reactivos: Perciben una vecindad del terreno y sus cambios y deciden cómo moverse en consecuencia, en dependencia además de las características específicas de cada tipo de agente.
+    * Pro-activos: Se mueven con comportamiento dirigido a llegar a la posición especificada de forma óptima.
+    * Sociables: Interactúan con agentes aliados mediante técnicas grupales de locomoción y con agentes enemigos mediante la obstaculización de su desplazamiento
+
+* **Condiciones ambientales:** Simulación basada en eventos discretos de situaciones que influyen en los movimientos que los agentes pueden realizar y en los costos de los mismos:          
+    * Eventos climatológicos: Con el paso del tiempo y los cambios de estaciones se van sucediendo condiciones climatológicas que conllevan a cambios en el terreno, como viento fuerte en otoño o congelamiento de ríos en invierno.
+    * Eventos arbitrarios: Pueden ocurrir eventos de forma aleatoria y no necesariamente relacionados con la estación, como lluvia o la caída de un árbol
+
+## Inteligencia artificial
+La toma de decisiones de los agentes se resuelve naturalmente mediante algoritmos de búsqueda de caminos de costo mínimo sobre grafos, pero como los juegos en tiempo real suelen tener entornos demasiado grandes y terrenos dinámicos, las estrategias básicas de búsqueda resultan inadecuadas. Por tanto planteamos como objetivo: Implementar y evaluar el comportamiento en distintos escenarios y con distintas heurísticas del algoritmo A* y sus derivados de búsqueda completa (IDA*, SMA*), así como algoritmos de búsqueda parcial que restringen la frontera de búsqueda en etapas alternadas de planificación y ejecución (se pierde precisión pero responde mejor a las limitaciones de recursos de tiempo y memoria) como Real-Time A* y una variante llamada Learning Real-Time A*. También mejorar el desempeño de los agentes con:
+* Técnicas de percepción, ordenamiento espacial y detección de colisiones
+* Algoritmos para comportamientos grupales de locomoción y comunicación
+* Búsqueda adversarial para obstruir el desplazamiento del enemigo
+* Uso de metaheurísticas para la optimización de los algoritmos anteriores
+
+https://github.com/lido98/NavMeshAgent

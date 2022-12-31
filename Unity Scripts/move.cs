@@ -4,14 +4,16 @@ using UnityEngine;
 
 public class move : MonoBehaviour
 {
-    public NavAgent navAgent;
+    public NavAgent navAgent { get; private set; }
+    public bool noMove;
     void Start()
     {
         navAgent = GetComponent<NavAgent>();
     }
     void Update()
     {
-        if (Input.GetMouseButton(1))
+        if (noMove) return;
+        if (Input.GetMouseButtonUp(1))
         {
             RaycastHit hit;
             if (Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out hit, 100))

@@ -10,12 +10,18 @@ namespace Agent_Space
 {
     public class Agent
     {
+        public string name { get; private set; }
+        public List<MapNode> ocupedNodes { get; private set; }
+        public float radius { get; private set; }
+
         public MapNode currentNode { get; private set; }
         public Point position { get; private set; }
         public PointNode currentPosition { get; private set; }
         private PointNode nextPosition;
-        private Queue<MapNode> trianglePath;
+
+        public Queue<MapNode> trianglePath { get; private set; }
         private Stack<PointNode> pointPath;
+        public Point destination { get; private set; }
 
         public Stack<Point> visualPath { get; private set; }
         public bool inMove { get; private set; }
@@ -23,14 +29,19 @@ namespace Agent_Space
         /// <summary> Compatibility of this Agent whit a material.</summary>
         public Dictionary<Material, float> compatibility;
 
-        public Agent()
+        public Agent(float radius, string name = "agent")
         {
+            this.name = name;
             compatibility = new Dictionary<Material, float>();
             trianglePath = new Queue<MapNode>();
             pointPath = new Stack<PointNode>();
             visualPath = new Stack<Point>();
+            ocupedNodes = new List<MapNode>();
+            this.radius = radius;
             inMove = false;
         }
+
+
         public void SetCompatibility(Material material, float value)
         {
             if (compatibility.ContainsKey(material))
@@ -45,10 +56,63 @@ namespace Agent_Space
                 if ((node as MapNode).triangle.PointIn(position))
                 {
                     currentNode = node as MapNode;
+                    ocupedNodes.Add(currentNode);
+                    currentNode.AddAgent(this);
+
+                    SetOcupedFromPosition();
                     break;
                 }
         }
         public void setPosition(Point point) { position = point; }
+
+        public void SetOcupedFromPosition()
+        {
+            Queue<MapNode> ocuped = new Queue<MapNode>();
+
+            ocuped.Enqueue(currentNode);
+
+            if (!ocupedNodes.Contains(currentNode))
+            {
+                ocupedNodes.Add(currentNode);
+                currentNode.AddAgent(this);
+            }
+
+            for (int i = 0; i < ocupedNodes.Count; i++)
+            {
+                MapNode node = ocupedNodes[i];
+                if (node != currentNode)
+                {
+                    if (position.DistanceToTriangle(node.triangle) > radius)
+                    {
+                        node.RemoveAgent(this);
+                        ocupedNodes.Remove(node);
+                        i -= 1;
+                    }
+                    else
+                        ocuped.Enqueue(node);
+                }
+            }
+            //Debug.Log("nodes despues de remover = " + ocupedNodes.Count);
+
+            //int o = 0;
+            while (ocuped.Count > 0)
+            {
+                //o++;
+                //Debug.Log(o);
+                MapNode node = ocuped.Dequeue();
+
+                foreach (MapNode adj in node.adjacents.Keys)
+                    if (position.DistanceToTriangle(adj.triangle) < radius)
+                        if (!ocupedNodes.Contains(adj))
+                        {
+                            ocuped.Enqueue(adj);
+                            Debug.Log("cantidad de agentes en nodo: " + adj.agentsIn.Count);
+                            ocupedNodes.Add(adj);
+                            adj.AddAgent(this);
+                        }
+            }
+            //Debug.Log(name + " tiene ocupados triangulos = " + ocupedNodes.Count);
+        }
 
         Tuple<MapNode[], MapNode, MapNode> LocalMap(Point endPoint)
         {
@@ -138,7 +202,7 @@ namespace Agent_Space
             Node end = localMap.Item3;
 
             if (end == null)
-                return new MapNode[0];
+                return null;
 
             Dijkstra dijkstra = new Dijkstra(init, end, nodes);
 
@@ -151,15 +215,15 @@ namespace Agent_Space
         }
         List<Arist> GetAritsPath(Point endPoint)
         {
-            Tuple<MapNode[], MapNode, MapNode> localMap = LocalMap(endPoint);
-            Node[] nodes = localMap.Item1; Node init = localMap.Item2; Node end = localMap.Item3;
-            Dijkstra dijkstra = new Dijkstra(init, end, nodes);
+            //Tuple<MapNode[], MapNode, MapNode> localMap = LocalMap(endPoint);
+            //Node[] nodes = localMap.Item1; Node init = localMap.Item2; Node end = localMap.Item3;
+            //Dijkstra dijkstra = new Dijkstra(init, end, nodes);
 
-            if (nodes.Length == 0)
-                return null;
+            //if (nodes.Length == 0)
+            //    return null;
 
-            MapNode[] path = tools.ToArrayAsMapNode(dijkstra.GetPath());/// Si se puede, mejorar la eficiencia con lo default
-
+            MapNode[] path = GetTrianglePath(endPoint);
+            if (path == null) return null;
             return Arist.ToAristList(path);
         }
         public PointNode[] GetPointPath(Point endPoint)
@@ -171,19 +235,20 @@ namespace Agent_Space
 
             float density = Environment.densityPath;
             float mCost = currentNode.MaterialCost(this);
-            List<PointNode> mapPoints = PointNode.Static.CreatePointMap(aritPath, position, endPoint, density, mCost);
+            List<PointNode> mapPoints = PointNode.Static.CreatePointMap(aritPath, position, endPoint, this, density, mCost);
 
-            ///MapPoints[0] = endNode
-            ///MapPoints[1] = initNode
-            Dijkstra dijkstra = new Dijkstra(mapPoints[1], mapPoints[0], mapPoints.ToArray());
+            ///MapPoints[0] = initNode
+            ///MapPoints[MapPoints.Count-1] = endNode
+            Dijkstra dijkstra = new Dijkstra(mapPoints[0], mapPoints[mapPoints.Count - 1], mapPoints.ToArray());
             List<Node> pointPath = dijkstra.GetPath();
 
             return tools.ToArrayAsPointNode(pointPath);
         }
         public void SetPointPath(Point point)
         {
+            destination = point;
             pointPath.Clear();
-            GetTrianglePath(point);
+            //GetTrianglePath(point);
             PointNode[] path = GetPointPath(point);
             for (int i = path.Length - 1; i >= 0; i--)
                 pointPath.Push(path[i]);
@@ -193,10 +258,25 @@ namespace Agent_Space
             NextPoint();
         }
 
+        int countMoves = 5;
         public void NextMove(int n = 1)
         {
+
             for (int i = 0; i < n; i++)
                 NextMoveBasic();
+
+            countMoves--;
+            if (countMoves <= 0)
+            {
+                //if (PointNode.Static.Collision(position, pointPath.ToArray()[0].point, this, currentNode).Item1)
+                //SetPointPath(destination);
+                ///Se le puede decir tambien que cambie la direccion y mantenga el camino ya calculado, habria que disennar un algoritmo que 
+                ///funcione con ello, pero no habra nada que lo haga preciso
+
+                countMoves = 1;
+                SetOcupedFromPosition();
+                //SetPointPath(destination);
+            }
         }
         void NextMoveBasic()
         {
@@ -254,6 +334,10 @@ namespace Agent_Space
                     result[i] = list[i] as PointNode;
                 return result;
             }
+        }
+        public override string ToString()
+        {
+            return name;
         }
     }
 }

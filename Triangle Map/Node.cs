@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using DijkstraSpace;
 using Point_Map;
+using Triangle_Map;
 using UnityEngine;
 namespace BaseNode
 {
@@ -64,6 +65,11 @@ namespace BaseNode
         {
             return new Point(a * point.x, a * point.y, point.z * a);
         }
+        public static Point operator /(Point point, float a)
+        {
+            return new Point(point.x / a, point.y / a, point.z / a);
+        }
+
         public static Point operator +(Point point1, Point point2)
         {
             return new Point(point1.x + point2.x, point1.y + point2.y, point1.z + point2.z);
@@ -117,6 +123,43 @@ namespace BaseNode
         public Vector3 ToVector3()
         {
             return new Vector3(x, y, z);
+        }
+        public float DistanceToLine(Point l1, Point l2)
+        {
+            Point point = OrtogonalProyection(l1, l2, this);
+            return Distance(point);
+        }
+        public float DistanceToSegment(Point l1, Point l2)
+        {
+            float lenSegment = l1.Distance(l2);
+            Point intersected = OrtogonalProyection(l1, l2, this);
+            bool inSegment = intersected.Distance(l1) <= lenSegment && intersected.Distance(l2) <= lenSegment;
+
+            if (inSegment)
+                return Distance(intersected);
+            else
+                return Math.Min(Distance(l1), Distance(l2));
+        }
+        public float DistanceToTriangle(Triangle triangle)
+        {
+            float d1 = DistanceToSegment(triangle.vertex1, triangle.vertex2);
+            float d2 = DistanceToSegment(triangle.vertex1, triangle.vertex3);
+            float d3 = DistanceToSegment(triangle.vertex3, triangle.vertex2);
+            return Math.Min(Math.Min(d1, d2), d3);
+        }
+        public static Point OrtogonalProyection(Point l1, Point l2, Point point)
+        {
+            Point vector1 = l2 - l1;
+            Point vectorInitToObstacle = point - l1;
+            Point vector2 = new Point(-vectorInitToObstacle.z, 0, vectorInitToObstacle.x);///Ortogonal
+
+            float
+                a = l1.x, b = l1.z, c = point.x, d = point.z,
+                x1 = vector1.x, x2 = vector2.x, y1 = vector1.z, y2 = vector2.z;
+
+            float alfa = (a - (b * x1) / y1 - c + d * x1 / y1) / (x2 - x1 * y2 / y1);
+
+            return point + vector2 * alfa;
         }
     }
 }

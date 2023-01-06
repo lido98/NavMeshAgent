@@ -10,33 +10,42 @@ namespace Point_Map
 {
     public class PointNode : Node
     {
-
-        PointNode end;
+        public PointNode end { get; protected set; }
+        public PointNode init { get; protected set; }
         public Point point { get; private set; }
         public Dictionary<PointNode, float> adjacents { get; private set; }
         public bool visitedInCreation = false;
+        public bool visitedAsAdjacent = false;
+        public bool inArist { get; private set; }
+        //public bool borderPoint = false;
 
-        public PointNode(Point point, PointNode end = null)
+        public PointNode(Point point, PointNode end = null, bool inArist = true)
         {
+            this.inArist = inArist;
             this.point = point;
             adjacents = new Dictionary<PointNode, float>();
             distance = float.MaxValue;
             this.end = end;
+            init = null;
         }
         public float get_x() { return point.x; }
         public float get_y() { return point.y; }
         public float get_z() { return point.z; }
 
         public void SetEnd(PointNode node) { end = node; }
+        public void SetInit(PointNode node) { init = node; }
+        public void SetPoint(Point point) { this.point = point; }
         public void AddAdjacent(PointNode node, float value = 1) { adjacents.Add(node, value); }
+        public void RemoveAdjacent(PointNode node) { adjacents.Remove(node); }
+        public void RemoveAllAdjacents() { adjacents = new Dictionary<PointNode, float>(); }
         public float EuclideanDistance(PointNode node) { return point.Distance(node.point); }
-        float Heuristic(PointNode endNode) { return EuclideanDistance(endNode); }
+        //float Heuristic(PointNode endNode) { return EuclideanDistance(endNode); }
         public override float Value()
         {
-            float g = distance;
-            float h = Heuristic(end) * Agent_Space.Environment.heuristicPointWeigth;
+            if (init != null)
+                return distance + EuclideanDistance(init) * init.adjacents[this];
 
-            return g + h;
+            return distance;
         }
         public int CompareTo(PointNode other)
         {
@@ -56,22 +65,22 @@ namespace Point_Map
                 result.Add(adj);
             return result;
         }
-
         public override float Distance(Node node)
         {
-            return EuclideanDistance(node as PointNode);// * adjacents[node as PointNode];
+            return EuclideanDistance(node as PointNode) * adjacents[node as PointNode];
         }
-
         internal class Static
         {
-            public static List<PointNode> CreatePointMap(List<Arist> arists, Point init, Point end, Agent agent = null, float n = 1, float cost = 1)
+            public static List<PointNode> CreatePointMap(PointNode initNode, Point end, Agent agent = null, float n = 1f, float cost = 1)
             {
+                DateTime t0 = DateTime.Now;
                 List<PointNode> result = new List<PointNode>();
-                MapNode[] mapNodes = agent.trianglePath.ToArray();
+                List<MapNode> mapNodes = agent.triangleList;
 
-                if (arists.Count == 0)
+                if (mapNodes.Count == 1)
                 {
-                    PointNode e = new PointNode(end); PointNode i = new PointNode(init, e);
+                    PointNode e = new PointNode(end, inArist: false);
+                    PointNode i = initNode;
                     e.SetEnd(e);
                     result.Add(i);
                     i.visitedInCreation = true;
@@ -83,47 +92,75 @@ namespace Point_Map
                     return result;
                 }
 
-                List<List<PointNode>> points = new List<List<PointNode>>();
-                PointNode endNode = new PointNode(end); endNode.SetEnd(endNode);
-                PointNode initNode = new PointNode(init, endNode);
+                PointNode endNode = new PointNode(end, inArist: false); endNode.SetEnd(endNode);
                 initNode.visitedInCreation = true;
 
-                foreach (Arist arist in arists)
+                //result.Add(initNode);
+
+                foreach (MapNode triangle in mapNodes)
                 {
-                    points.Add(new List<PointNode>());
-                    foreach (Point point in arist.ToPoints(n))
-                        points[points.Count - 1].Add(new PointNode(point, endNode));
-                }
+                    ///Lo proximo se va creando dinamicamente cuando se va creando el camino de triangulos.
+                    ///Tambien se agrega a un mapa de puntos del agente estos dinamicamente mientras se crean los 
+                    ///triangulos
 
-                CreateSimplePath(initNode, points[0], agent, agent.currentNode, cost, endNode, result);
+                    //foreach (MapNode adj in triangle.adjacents.Keys)
+                    //    if (mapNodes.Contains(adj))
+                    //        if (triangle.adjacents[adj].points.Count == 0)
+                    //            triangle.adjacents[adj].ToPoints(n);
 
-                for (int i = 0; i < points.Count - 1; i++)
-                    for (int j = 0; j < points[i].Count; j++)
-                        CreateSimplePath(points[i][j], points[i + 1], agent, mapNodes[i + 1].origin, arists[i].materialCost, endNode, result);
+                    if (triangle == mapNodes[0])
+                    {
+                        foreach (MapNode adj in triangle.adjacents.Keys)
+                        {
+                            Arist arist = triangle.adjacents[adj];
 
-                foreach (PointNode node in points[points.Count - 1])
-                {
-                    List<PointNode> temp = new List<PointNode>(); temp.Add(endNode);
-                    CreateSimplePath(node, temp, agent, mapNodes[points.Count].origin, arists[points.Count - 1].materialCost, endNode, result);
+                            if (mapNodes.Contains(adj))
+                            {
+                                CreateSimplePath(initNode, arist.points, agent, triangle.origin,
+                                          triangle.MaterialCost(agent), endNode, result);
+                                Debug.Log("La arista tiene cantidad de puntos = " + arist.points.Count);
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (triangle == mapNodes[mapNodes.Count - 1])
+                    {
+                        List<PointNode> temp = new List<PointNode>(); temp.Add(endNode);
+
+                        foreach (MapNode adj in triangle.adjacents.Keys)
+                        {
+                            Arist arist = triangle.adjacents[adj];
+                            if (mapNodes.Contains(adj))
+                                foreach (PointNode point in arist.points)
+                                    CreateSimplePath(point, temp, agent, triangle.origin,
+                                        triangle.MaterialCost(agent), endNode, result);
+                        }
+                        continue;
+                    }
+
+                    foreach (MapNode adj1 in triangle.adjacents.Keys)
+                        foreach (MapNode adj2 in triangle.adjacents.Keys)
+                        {
+                            Arist arist1 = triangle.adjacents[adj1];
+                            Arist arist2 = triangle.adjacents[adj2];
+
+                            if (arist1 != arist2 &&
+                                mapNodes.Contains(adj1) &&
+                                mapNodes.Contains(adj2))
+                                foreach (PointNode p1 in arist1.points)
+                                    CreateSimplePath(p1, arist2.points, agent, triangle.origin,
+                                        triangle.MaterialCost(agent), endNode, result);
+                        }
                 }
 
                 result.Add(endNode);
+                Debug.Log("Crear el mapa de puntos demoro: " + (DateTime.Now - t0)); 
                 return result;
-            }
-            public static Tuple<bool, Agent> Collision(Point node1, Point node2, Agent agent, MapNode mapNode)
-            {
-                Point l1 = node1;
-                Point l2 = node2;
 
-                foreach (Agent agentObstacle in mapNode.agentsIn)
-                {
-                    if (agentObstacle == agent) continue;
-
-                    if (agentObstacle.position.DistanceToSegment(l1, l2) < agent.radius + agentObstacle.radius)
-                        /// Collision
-                        return new Tuple<bool, Agent>(true, agentObstacle);
-                }
-                return new Tuple<bool, Agent>(false, null);
+                //Debug.Log("Count del resultado del mapa de puntos " + agent.pointsMap.Count);
+                //agent.pointsMap.Add(endNode);
+                //return agent.pointsMap;
             }
 
             static void CreateSimplePath(PointNode init, List<PointNode> list,
@@ -131,19 +168,19 @@ namespace Point_Map
                 List<PointNode> result)
             {
 
-                if (!init.visitedInCreation) return;
+                //if (!init.visitedInCreation) return;
 
                 List<PointNode> endList = new List<PointNode>();
                 endList.Add(init);
 
-                result.Add(init);
+                if (!result.Contains(init)) /// Esto no me gusta en cuanto a eficiencia FFF
+                    result.Add(init);
+
                 init.SetDistance(0);
-                HeapNode q = new HeapNode(init);
+                Heap q = new Heap(init);
 
 
                 List<Agent> visitedObstacles = new List<Agent>();
-
-                //int overflow = 0;
 
                 List<PointNode> temp = new List<PointNode>();
                 foreach (PointNode node in list)
@@ -151,53 +188,32 @@ namespace Point_Map
 
                 while (temp.Count > 0 && q.size > 0)
                 {
-                    //overflow++;
-                    //Debug.Log("Overflow: " + overflow);
-
                     PointNode current = q.Pop() as PointNode;
 
                     for (int i = 0; i < temp.Count; i++)
                     {
                         PointNode end = temp[i];
 
-                        Tuple<bool, Agent> collision = Collision(current.point, end.point, agent, mapNode);
-                        if (collision.Item1)
+                        if (Agent_Space.Environment.pathWithAgents)
                         {
-                            if (!visitedObstacles.Contains(collision.Item2))
-                            {
-                                visitedObstacles.Add(collision.Item2);
+                            Tuple<bool, Agent> collision = Agent.Collision(current.point, end.point, agent, mapNode, 1.0f);
 
-                                PointNode another1 = new PointNode(GeneratedPoint(init.point, agent, collision.Item2), endNode);
-                                if (mapNode.triangle.PointIn(another1.point))
-                                    if (!Collision(current.point, another1.point, agent, mapNode).Item1)
-                                    {
-                                        current.AddAdjacent(another1, cost);
-                                        //DrawTwoPoints(current.point, another1.point);
-                                        another1.visitedInCreation = true;
-                                        another1.SetDistance(current.distance + current.EuclideanDistance(another1));
-                                        q.Push(another1);
-                                        result.Add(another1);
-                                        endList.Add(another1);
-                                    }
-                                PointNode another2 = new PointNode(GeneratedPoint(init.point, agent, collision.Item2, true), endNode);
-                                if (mapNode.triangle.PointIn(another2.point))
-                                    if (!Collision(current.point, another2.point, agent, mapNode).Item1)
-                                    {
-                                        current.AddAdjacent(another2, cost);
-                                        //DrawTwoPoints(current.point, another2.point);
-                                        another2.visitedInCreation = true;
-                                        another2.SetDistance(current.distance + current.EuclideanDistance(another2));
-                                        q.Push(another2);
-                                        result.Add(another2);
-                                        endList.Add(another2);
-                                    }
+                            if (collision.Item1)
+                            {
+                                CreateObstacleBorder(current, end, agent, mapNode, cost, result,
+                                    visitedObstacles, q, endList, endNode, end);
+                                current.AddAdjacent(end, float.MaxValue - 10000 + cost);
+                                continue;
                             }
-                            continue;
                         }
 
                         current.AddAdjacent(end, cost);
-                        //DrawTwoPoints(current.point, end.point);
+
+                        DrawTwoPoints(current.point, end.point, Color.yellow);
+
                         end.visitedInCreation = true;
+                        //if (!result.Contains(end)) /// Esto no me gusta en cuanto a eficiencia FFF
+                        //    result.Add(end);
                         temp.Remove(end); i--;
                     }
                     foreach (PointNode node in endList)
@@ -211,24 +227,458 @@ namespace Point_Map
                 }
 
             }
-            static Point GeneratedPoint(Point init, Agent agent, Agent collision, bool negative = false, float n = 2.2f)
-            {
-                Point vector1 = collision.position - init;
-                Point vector2 = new Point(-vector1.z, 0, vector1.x);///Ortogonal
-                float den = (float)Math.Sqrt(vector2.x * vector2.x + vector2.z * vector2.z);
-                Point unitVector2 = vector2 / den;
 
-                if (negative)
-                    return collision.position + unitVector2 * (agent.radius + collision.radius) * -n;
-                return collision.position + unitVector2 * (agent.radius + collision.radius) * n;
+            static void CreateObstacleBorder(PointNode init, PointNode end,
+                Agent agent, MapNode mapNode, float cost, List<PointNode> result,
+                List<Agent> visitedObstacles, Heap q, List<PointNode> endList,
+                PointNode endNode, PointNode destination)
+            {
+                ///De alguna manera hay que hacer que esto pueda volver a visitar otros agentes para detectar colisiones 
+                ///para poder hacer el bordeo mejor
+
+                Tuple<bool, Agent> collision = Agent.Collision(init.point, end.point, agent, mapNode, 1.0f);
+                if (collision.Item1)
+                {
+                    //DrawTwoPoints(init.point, collision.Item2.position, Color.black);
+
+                    if (!visitedObstacles.Contains(collision.Item2))
+                    {
+                        visitedObstacles.Add(collision.Item2);
+
+                        Point center = collision.Item2.position;
+
+                        PointNode W = new PointNode(center -
+                            Point.VectorUnit(init.point, center)
+                            * (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder,
+                            endNode, inArist: false);///West view from lefth to rigth
+
+                        PointNode e = new PointNode(center +
+                            Point.VectorUnit(init.point, center) *
+                            (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                            , endNode, inArist: false);///Est view lefth to rigth
+
+                        PointNode sw = new PointNode(W.point +
+                            Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                            (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                            , endNode, inArist: false);///SouthWest view lefth to rigth
+
+                        PointNode s = new PointNode(center +
+                            Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                            (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                            , endNode, inArist: false);///South view lefth to rigth
+
+                        PointNode se = new PointNode(e.point +
+                            Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                            (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                            , endNode, inArist: false);///South view lefth to rigth
+
+                        PointNode nw = new PointNode(W.point -
+                            Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                            (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                            , endNode, inArist: false);///SouthWest view lefth to rigth
+
+                        PointNode n = new PointNode(center -
+                            Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                            (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                            , endNode, inArist: false);///South view lefth to rigth
+
+                        PointNode ne = new PointNode(e.point -
+                            Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                            (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                            , endNode, inArist: false);///South view lefth to rigth
+
+
+                        //DrawTwoPoints(W.point, nw.point, Color.red);
+                        //DrawTwoPoints(nw.point, n.point, Color.red);
+                        //DrawTwoPoints(n.point, ne.point, Color.red);
+                        //DrawTwoPoints(ne.point, ne.point, Color.red);
+
+
+
+                        Queue<PointNode> up = new Queue<PointNode>();
+                        /*up.Enqueue(W);*/
+                        up.Enqueue(nw); /*up.Enqueue(n);*/ up.Enqueue(ne); up.Enqueue(e);
+                        Queue<PointNode> down = new Queue<PointNode>();
+                        down.Enqueue(sw); /*down.Enqueue(s);*/ down.Enqueue(se); down.Enqueue(e);
+
+
+                        PointNode node1 = init;
+
+                        while (up.Count > 0)
+                        {
+                            if (!node1.visitedInCreation) break;
+
+                            if (!Agent.Collision(node1.point, destination.point, agent, mapNode, 1.0f).Item1)
+                            {
+                                //node1.AddAdjacent(destination, cost);
+
+                                //DrawTwoPoints(node1.point, destination.point, Color.green);
+
+                                //destination.visitedInCreation = true;
+                                //destination.SetDistance(node1.distance + node1.EuclideanDistance(destination));
+                                ////q.Push(destination);
+                                //endList.Add(destination);
+                                //break;
+                            }
+
+                            PointNode node2 = up.Dequeue();
+
+                            if (mapNode.triangle.PointIn(node2.point))
+                                if (!Agent.Collision(node1.point, node2.point, agent, mapNode, 1.0f).Item1)
+                                {
+                                    node1.AddAdjacent(node2, cost);
+
+                                    DrawTwoPoints(node1.point, node2.point, Color.green);
+
+                                    node2.visitedInCreation = true;
+                                    node2.SetDistance(node1.distance + node1.EuclideanDistance(node2));
+                                    q.Push(node2);
+                                    result.Add(node2);
+                                    endList.Add(node2);
+                                }
+                                else
+                                {
+                                    CreateObstacleBorder(node1, node2, agent, mapNode, cost, result, visitedObstacles, q, endList, endNode, destination);
+                                }
+
+                            node1 = node2;
+                        }
+
+                        node1 = W;
+                        while (down.Count > 0)
+                        {
+                            if (!node1.visitedInCreation) break;
+
+                            if (!Agent.Collision(node1.point, destination.point, agent, mapNode, 1.0f).Item1)
+                            {
+                                //node1.AddAdjacent(destination, cost);
+
+                                //DrawTwoPoints(node1.point, destination.point, Color.green);
+
+                                //destination.visitedInCreation = true;
+                                //destination.SetDistance(node1.distance + node1.EuclideanDistance(destination));
+                                ////q.Push(destination);
+                                //endList.Add(destination);
+                                //break;
+                            }
+
+
+                            PointNode node2 = down.Dequeue();
+                            if (mapNode.triangle.PointIn(node2.point))
+                                if (!Agent.Collision(node1.point, node2.point, agent, mapNode, 1.0f).Item1)
+                                {
+                                    node1.AddAdjacent(node2, cost);
+
+                                    DrawTwoPoints(node1.point, node2.point, Color.green);
+
+                                    node2.visitedInCreation = true;
+                                    node2.SetDistance(node1.distance + node1.EuclideanDistance(node2));
+                                    q.Push(node2);
+                                    result.Add(node2);
+                                    endList.Add(node2);
+                                }
+                                else
+                                {
+                                    CreateObstacleBorder(node1, node2, agent, mapNode, cost, result, visitedObstacles, q, endList, endNode, destination);
+                                }
+
+                            node1 = node2;
+                        }
+                    }
+                }
             }
-            static void DrawTwoPoints(Point p1, Point p2)
+            public static void DrawTwoPoints(Point p1, Point p2, Color color)
             {
                 Vector3 a = new Vector3(p1.x, p1.y, p1.z);
                 Vector3 b = new Vector3(p2.x, p2.y, p2.z);
-                Debug.DrawLine(a, b, Color.black, 50f);
+                Debug.DrawLine(a, b, color, 50f);
             }
         }
     }
+    public class PointPath
+    {
+        private Agent agent;
+        public PointNode currentPoint { get; private set; }
+        public PointNode nextPoint { get; private set; }
+        public MapNode currentNode { get; private set; }
+        public Stack<MapNode> triangleMap { get; private set; }
+        public bool empty { get; private set; }
 
+        public PointPath(Agent agent)
+        {
+            this.agent = agent;
+            triangleMap = new Stack<MapNode>();
+            currentNode = null;
+            empty = true;
+        }
+        public PointNode Pop(bool onCollision = false)
+        {
+            if (empty) return nextPoint;
+
+            if (onCollision)
+                currentPoint.SetPoint(agent.position);
+            else
+            {
+                if (nextPoint.inArist || currentPoint == null)
+                    currentNode = triangleMap.Pop().origin;
+
+                currentPoint = nextPoint;
+            }
+
+            Heap q = new Heap();
+            foreach (PointNode node in currentPoint.adjacents.Keys)
+            {
+                node.SetInit(currentPoint);
+                q.Push(node);
+            }
+            Debug.Log("Cantidad de elementos en el heap pa caminar: " + q.size);
+
+            PointNode next = null;
+
+            while (q.size > 0)
+            {
+                next = q.Pop() as PointNode;
+
+                Tuple<bool, Agent> collision = Agent.Collision(agent.position, next.point, agent, currentNode);
+                if (collision.Item1)
+                {
+                    next.SetFather(null);
+                    Border(currentPoint, next, agent, currentNode,
+                        currentNode.MaterialCost(agent), new List<Agent>(), q, next);
+                    currentPoint.RemoveAdjacent(next);
+                }
+                else
+                {
+                    nextPoint = next;
+                    if (next.adjacents.Count == 0) empty = true;
+                    return next;
+                }
+            }
+
+            empty = true;
+            return currentPoint;
+        }
+        public void PushPointMap(PointNode[] nodes)
+        {
+            empty = false;
+            ///Invertir la direccion de las aristas
+            foreach (PointNode node in nodes)
+                foreach (PointNode adj in node.adjacents.Keys)
+                {
+                    adj.AddAdjacent(node, node.adjacents[adj]);
+                    node.RemoveAdjacent(adj);
+                }
+            currentPoint = null;
+            nextPoint = nodes[nodes.Length - 1];
+        }
+        public void PushPointMap(List<PointNode> nodes)
+        {
+            empty = false;
+            ///Invertir la direccion de las aristas ultimo y primero
+            PointNode node = nodes[0];
+
+            List<PointNode> temp = new List<PointNode>();
+            foreach (PointNode adj in node.adjacents.Keys) temp.Add(adj);
+
+            foreach (PointNode adj in temp)
+            {
+                adj.AddAdjacent(node, node.adjacents[adj]);
+                node.RemoveAdjacent(adj);
+            }
+
+            foreach (PointNode point in nodes)
+                if (point.adjacents.ContainsKey(nodes[nodes.Count - 1]))
+                {
+                    nodes[nodes.Count - 1].AddAdjacent(point, point.adjacents[nodes[nodes.Count - 1]]);
+                    point.RemoveAdjacent(nodes[nodes.Count - 1]);
+                }
+
+            currentPoint = null;
+            nextPoint = nodes[nodes.Count - 1];
+        }
+
+        public void PushTriangleMap(MapNode[] nodes)
+        {
+            triangleMap.Clear();
+            foreach (MapNode node in nodes)
+                triangleMap.Push(node);
+        }
+        public void PushTriangleMap(List<MapNode> nodes)
+        {
+            triangleMap.Clear();
+            foreach (MapNode node in nodes)
+                triangleMap.Push(node);
+        }
+
+        public void clear()
+        {
+            currentNode = null;
+            nextPoint = null;
+            currentPoint = null;
+        }
+        void Border(PointNode initIn, PointNode end,
+                Agent agent, MapNode mapNode, float cost,
+                List<Agent> visitedObstacles, Heap q, PointNode destination)
+        {
+            PointNode init = new PointNode(initIn.point, inArist: false);
+            initIn.AddAdjacent(init);
+            CreateObstacleBorder(init, end, agent, mapNode, cost, visitedObstacles, destination);
+
+            if (destination.father != null)/// Si se llego al destino por aqui, push
+                q.Push(init);
+        }
+        void CreateObstacleBorder(PointNode init, PointNode end,
+                Agent agent, MapNode mapNode, float cost,
+                List<Agent> visitedObstacles, PointNode destination)
+        {
+            ///De alguna manera hay que hacer que esto pueda volver a visitar otros agentes para detectar colisiones 
+            ///para poder hacer el bordeo mejor
+
+            Tuple<bool, Agent> collision = Agent.Collision(init.point, end.point, agent, mapNode, 1.0f);
+            if (collision.Item1)
+            {
+                //DrawTwoPoints(init.point, collision.Item2.position, Color.black);
+
+                if (!visitedObstacles.Contains(collision.Item2))
+                {
+                    visitedObstacles.Add(collision.Item2);
+
+                    Point center = collision.Item2.position;
+
+                    PointNode W = new PointNode(center -
+                        Point.VectorUnit(init.point, center)
+                        * (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///West view from lefth to rigth
+
+                    PointNode e = new PointNode(center +
+                        Point.VectorUnit(init.point, center) *
+                        (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///Est view lefth to rigth
+
+                    PointNode sw = new PointNode(W.point +
+                        Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                        (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///SouthWest view lefth to rigth
+
+                    PointNode s = new PointNode(center +
+                        Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                        (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///South view lefth to rigth
+
+                    PointNode se = new PointNode(e.point +
+                        Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                        (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///South view lefth to rigth
+
+                    PointNode nw = new PointNode(W.point -
+                        Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                        (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///SouthWest view lefth to rigth
+
+                    PointNode n = new PointNode(center -
+                        Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                        (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///South view lefth to rigth
+
+                    PointNode ne = new PointNode(e.point -
+                        Point.VectorUnit(Point.OrtogonalVector(init.point, W.point)) *
+                        (agent.radius + collision.Item2.radius) * Agent_Space.Environment.collisionBorder
+                        , inArist: false);
+                    ///South view lefth to rigth
+
+                    Queue<PointNode> up = new Queue<PointNode>();
+                    up.Enqueue(nw); /*up.Enqueue(n);*/ up.Enqueue(ne); up.Enqueue(e);
+                    Queue<PointNode> down = new Queue<PointNode>();
+                    down.Enqueue(sw); /*down.Enqueue(s);*/ down.Enqueue(se); down.Enqueue(e);
+
+
+                    init.visitedInCreation = true;
+                    PointNode node1 = init;
+
+                    while (up.Count > 0)
+                    {
+
+                        if (!node1.visitedInCreation) break;
+                        if (!Agent.Collision(node1.point, destination.point, agent, mapNode, 1.0f).Item1)
+                        {
+                            node1.AddAdjacent(destination, cost);
+                            destination.SetFather(node1);
+                            destination.SetInit(node1);
+                            setDistances(destination, cost);
+                            break;
+                        }
+
+                        PointNode node2 = up.Dequeue();
+
+                        //if (mapNode.triangle.PointIn(node2.point))
+                            if (!Agent.Collision(node1.point, node2.point, agent, mapNode, 1.0f).Item1)
+                            {
+                                node1.AddAdjacent(node2, cost);
+                                node2.SetFather(node1);
+                                node2.SetInit(node1);
+                                node2.visitedInCreation = true;
+
+                                PointNode.Static.DrawTwoPoints(node1.point, node2.point, Color.green);
+                            }
+                            else
+                                CreateObstacleBorder(node1, node2, agent, mapNode, cost, visitedObstacles, destination);
+
+                        node1 = node2;
+                    }
+
+                    node1 = init;
+                    while (down.Count > 0)
+                    {
+                        if (!node1.visitedInCreation) break;
+                        if (!Agent.Collision(node1.point, destination.point, agent, mapNode, 1.0f).Item1)
+                        {
+                            node1.AddAdjacent(destination, cost);
+                            destination.SetFather(node1);
+                            destination.SetInit(node1);
+                            setDistances(destination, cost);
+                            break;
+                        }
+
+                        PointNode node2 = down.Dequeue();
+
+                        //if (mapNode.triangle.PointIn(node2.point))
+                            if (!Agent.Collision(node1.point, node2.point, agent, mapNode, 1.0f).Item1)
+                            {
+                                node1.AddAdjacent(node2, cost);
+                                node2.SetInit(node1);
+                                node2.SetFather(node1);
+                                node2.visitedInCreation = true;
+
+                                PointNode.Static.DrawTwoPoints(node1.point, node2.point, Color.green);
+                            }
+                            else
+                                CreateObstacleBorder(node1, node2, agent, mapNode, cost, visitedObstacles, destination);
+
+                        node1 = node2;
+                    }
+                }
+            }
+        }
+        void setDistances(PointNode destination, float cost)
+        {
+            if (destination.father != null)
+            {
+                PointNode temp = destination;
+
+                while (temp.father.distance >= float.MaxValue - 100)
+                {
+                    temp.father.SetDistance(temp.distance + temp.EuclideanDistance(temp.father as PointNode) * cost);
+                    temp = temp.father as PointNode;
+                    if (temp.father == null) break;
+                }
+            }
+        }
+    }
 }

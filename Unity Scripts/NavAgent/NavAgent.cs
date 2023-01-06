@@ -8,7 +8,6 @@ using System;
 
 public class NavAgent : MonoBehaviour
 {
-    //public string Name = "agent";
     public float radius = 1;
     public Agent agent { get; private set; }
     public int speed = 15;
@@ -42,9 +41,8 @@ public class NavAgent : MonoBehaviour
 
         if (framesForUpdatePath <= 0)
         {
-            framesForUpdatePath = 1;
-            agent.SetPointPath(agent.destination);
-            //agent.SetOcupedFromPosition();
+            framesForUpdatePath = 5;
+            //agent.SetPointPath(agent.destination);
         }
         framesForUpdatePath--;
 

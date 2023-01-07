@@ -5,10 +5,11 @@ using System.Text;
 using UnityEngine;
 using Agent_Space;
 using BaseNode;
+using Point_Map;
 
 namespace Triangle_Map
 {
-    class MapNode : Node
+    public class MapNode : Node
     {
         public Agent_Space.Material material { get; private set; }
 
@@ -16,39 +17,49 @@ namespace Triangle_Map
         public Dictionary<MapNode, Arist> adjacents { get; private set; }
         public MapNode origin { get; private set; }
         public float materialCost { get => MaterialCost(); }
+        public List<Agent> agentsIn { get; private set; }
 
-        MapNode end;
+        Point end;
         Agent agent;///esto importa por compatibilidad de materiales
         public MapNode(Triangle triangle)
         {
             this.triangle = triangle;
             adjacents = new Dictionary<MapNode, Arist>();
-
+            agentsIn = new List<Agent>();
             this.agent = null;
             this.end = null;
             this.origin = null;
 
             DefaultValues();
         }
-        public MapNode(MapNode origin, Agent agent, MapNode end = null)
+        public MapNode(MapNode origin, Agent agent, Point end = null)
         {
             this.triangle = origin.triangle;
             adjacents = new Dictionary<MapNode, Arist>();
+            agentsIn = new List<Agent>();
 
             this.agent = agent;
             this.end = end;
             this.origin = origin;
-            this.material = origin.material;
             DefaultValues();
+            this.material = origin.material;
         }
-        public void SetEndNode(MapNode endNode) { this.end = endNode; }
+        public void AddAgent(Agent agent)
+        {
+            agentsIn.Add(agent);
+        }
+        public void RemoveAgent(Agent agent)
+        {
+            agentsIn.Remove(agent);
+        }
+        public void SetEndPoint(Point point) { this.end = point; }
         public void SetMaterial(Agent_Space.Material material) { this.material = material; }
 
         public void AddAdjacent(MapNode node, Arist arist) { adjacents.Add(node, arist); }
         public void AddAdjacent(MapNode node, Point p1, Point p2) { adjacents.Add(node, new Arist(p1, p2)); }
         public override float Value()
         {
-            float hWeigth = 2;
+            float hWeigth = Agent_Space.Environment.heuristicTriangleWeigth;
             float gWeigth = 1;
             return distance * gWeigth + Heuristic() * hWeigth;
         }
@@ -58,7 +69,7 @@ namespace Triangle_Map
         }
         float Heuristic()
         {
-            return EuclideanDistance(end);
+            return triangle.barycenter.Distance(end);
         }
         public void DefaultValues()
         {
@@ -83,8 +94,10 @@ namespace Triangle_Map
 
         public override float Distance(Node node)
         {
-            List<Point> points = adjacents[node as MapNode].ToPoints(1f);
+            float density = Agent_Space.Environment.densityPath;
+            List<Point> points = adjacents[node as MapNode].ToPoints(density, agent.pointsMap);
             Point mid = MinMid(points, triangle.barycenter, (node as MapNode).triangle.barycenter);
+
             //drawToNode(node, mid);
 
             float d1 = triangle.barycenter.Distance(mid) * MaterialCost();
@@ -123,8 +136,14 @@ namespace Triangle_Map
                 return agent.compatibility[this.material];
             return (float)this.material / 10f;
         }
+        public float MaterialCost(Agent agent)
+        {
+            if (agent.compatibility.ContainsKey(this.material))
+                return agent.compatibility[this.material];
+            return (float)this.material / 10f;
+        }
     }
-    class Triangle
+    public class Triangle
     {
         public Point vertex1 { get; private set; }
         public Point vertex2 { get; private set; }
@@ -160,10 +179,8 @@ namespace Triangle_Map
 
             Point d = b - a; Point e = c - a;
 
-
             float w1 = (e.x * (a.z - p.z) + e.z * (p.x - a.x)) / (d.x * e.z - d.z * e.x);
             float w2 = (p.z - a.z - w1 * d.z) / e.z;
-
 
             return (w1 >= 0.0) && (w2 >= 0.0) && ((w1 + w2) <= 1.0);
         }
@@ -172,39 +189,69 @@ namespace Triangle_Map
             return barycenter.ToString();
         }
     }
-    class Arist
+    public class Arist
     {
         public float materialCost { get; private set; }
         public Point p1 { get; private set; }
         public Point p2 { get; private set; }
+        public List<PointNode> points { get; private set; }
+
+        /// a arist has maximum 2 triangles
+        public List<MapNode> triangles { get; private set; }
         public Arist(Point p1, Point p2)
         {
             this.p1 = p1;
             this.p2 = p2;
+            points = new List<PointNode>();
+            triangles = new List<MapNode>();
         }
         public Arist(Arist a)
         {
             p1 = a.p1;
             p2 = a.p2;
+            points = new List<PointNode>();
+            triangles = new List<MapNode>();
         }
-        public List<Point> ToPoints(float n = 1)
+        public List<Point> ToPoints(float n = 1f, List<PointNode> map = null, bool set = false)
         {
-
             Point vector = p2 - p1;
 
             List<Point> result = new List<Point>();
+            points = new List<PointNode>();
 
             float k = p1.Distance(p2) * n;
 
             result.Add(p1);
+
+            PointNode node = new PointNode(p1); foreach (MapNode triangle in triangles) node.AddTriangle(triangle);
+            points.Add(node);
+
+            if (map != null)
+                map.Add(node);
+
             for (int i = 1; i < k; i++)
             {
                 float alfa = (float)i / (float)k;
                 result.Add(p1 + vector * alfa);
+                node = new PointNode(p1 + vector * alfa); foreach (MapNode triangle in triangles) node.AddTriangle(triangle);
+                points.Add(node);
+
+                if (map != null)
+                    map.Add(node);
             }
             result.Add(p2);
+            node = new PointNode(p2);
+            points.Add(node);
+
+            if (map != null)
+                map.Add(node); foreach (MapNode triangle in triangles) node.AddTriangle(triangle);
 
             return result;
+        }
+        public void addPointsToMap(List<PointNode> map)
+        {
+            foreach (PointNode point in points)
+                map.Add(point);
         }
         public void SetMaterialCost(float value)
         {
@@ -224,6 +271,14 @@ namespace Triangle_Map
 
 
             return result;
+        }
+        public void AddTriangle(MapNode triangle)
+        {
+            triangles.Add(triangle);
+        }
+        public Arist Clone()
+        {
+            return new Arist(this);
         }
     }
 }

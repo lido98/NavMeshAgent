@@ -8,7 +8,6 @@ using UnityEngine;
 
 public class DebuguerMove : MonoBehaviour
 {
-    public GameObject sphere;
     Vector3 endPosition;
     Agent agent;
 
@@ -19,40 +18,54 @@ public class DebuguerMove : MonoBehaviour
     IEnumerator start()
     {
         yield return new WaitForEndOfFrame();
-        agent = new Agent();
-        agent.setPosition(new Point(transform.position.x, transform.position.y, transform.position.z));
-        agent.searchCurrentNode();
-        DFSDraw(agent.currentNode, Color.yellow);
+        agent = GetComponent<move>().navAgent.agent;
+
+        //agent.setPosition(new Point(transform.position.x, transform.position.y, transform.position.z));
+        //agent.searchCurrentNode();
+        //DFSDraw(agent.currentNode, Color.yellow);
 
         endPosition = new Vector3(1, 1, 1);
-
     }
     // Update is called once per frame
 
     Node[] tempT = new Node[] { };
     PointNode[] points = new PointNode[] { };
 
+    IEnumerator updt()
+    {
+        yield return new WaitForSeconds(100f);
+      
+    }
 
     void Update()
     {
-        if (agent != null)
-            if (endPosition != sphere.transform.position)
+        if (agent == null) return;
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            foreach (MapNode node in agent.currentNode.adjacents.Keys)
+                DrawFromTriangle(node.triangle, Color.blue);
+            DrawFromTriangle(agent.currentNode.triangle, Color.red);
+        }
+        if (Input.GetMouseButton(1))
+        {
+            //StartCoroutine(updt());
+            DrawPath(tempT, Color.clear);
+            DrawPath(points, Color.white);
+
+            RaycastHit hit;
+            if (Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out hit, 100))
             {
-                DrawPath(tempT, Color.yellow);
-                DrawPath(points, Color.white);
 
-                endPosition = sphere.transform.position;
-                Point end = new Point(sphere.transform.position.x, sphere.transform.position.y, sphere.transform.position.z);
-
-                points = agent.GetPointPath(end);
-
+                Point end = new Point(hit.point.x, hit.point.y, hit.point.z);
                 tempT = agent.GetTrianglePath(end);
-
-                DrawPath(tempT, Color.red);
-
-                DrawPath(points, Color.blue);
-
+                if (tempT != null)
+                {
+                    DrawPath(tempT, Color.black);
+                    points = agent.GetPointPath(end);
+                    DrawPath(points, Color.blue);
+                }
             }
+        }
     }
     void DrawPath(PointNode[] points, Color color)
     {
